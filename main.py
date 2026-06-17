@@ -1,5 +1,11 @@
+# No topo do arquivo main.py
+import models
+from database import engine
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
+
+# Cria as tabelas no banco de dados automaticamente ao iniciar
+models.Base.metadata.create_all(bind=engine)
 
 # 1. Instanciação da API
 app = FastAPI(title="API Inova Lab - Inventário Maker")
@@ -9,15 +15,14 @@ class ComponenteSchema(BaseModel):
     nome: str = Field(..., min_length=2, description="Nome do componente maker")
     quantidade: int = Field(..., ge=0, description="Quantidade em estoque (deve ser maior ou igual a zero)")
     categoria: str = Field(..., description="Categoria do item (ex: Atuadores, Microcontroladores)")
-    estado: str = Field(default="Disponível", description="Estado do componente (ex: Disponível, Em Uso, Defeituoso)")
-
+    estado_conservacao: str = Field(..., min_length=1, description="Estado de conservação do componente (ex: Novo, Bom, Usado)")
 
 # 3. Nosso "Banco de Dados" temporário em memória
+# (Chaves padronizadas como 'estado_conservacao' para alinhar com o Pydantic)
 estoque_laboratorio = [
-    {"id": 1, "nome": "Arduino Sensor Shield", "quantidade": 15, "categoria": "Placas de Expansão", "estado": "Disponível"},
-    {"id": 2, "nome": "Micro Servo Motor SG90", "quantidade": 42, "categoria": "Atuadores", "estado": "Disponível"},
-    {"id": 3, "nome": "Esteira em Acrílico", "quantidade": 2, "categoria": "Mecânica", "estado": "Disponível"},
-    {"id": 4, "nome": "Sensor Ultrassônico HC-SR04", "quantidade": 30, "categoria": "Sensores", "estado": "Disponível"}
+    {"id": 1, "nome": "Arduino Sensor Shield", "quantidade": 15, "categoria": "Placas de Expansão", "estado_conservacao": "Bom"},
+    {"id": 2, "nome": "Micro Servo Motor SG90", "quantidade": 42, "categoria": "Atuadores", "estado_conservacao": "Novo"},
+    {"id": 3, "nome": "Esteira em Acrílico", "quantidade": 2, "categoria": "Mecânica", "estado_conservacao": "Usado"}
 ]
 
 # Rota Raiz
@@ -29,7 +34,6 @@ def raiz():
 @app.get("/componentes")
 def listar_componentes():
     return estoque_laboratorio
-    raise HTTPException(status_code=404, detail="Componente não encontrado no laboratório.")
 
 # CRUD - CREATE (Cadastrar novo item)
 @app.post("/componentes", status_code=201)
@@ -47,7 +51,6 @@ def adicionar_componente(novo_componente: ComponenteSchema):
     
     estoque_laboratorio.append(componente_dict)
     return {"mensagem": "Componente adicionado com sucesso!", "componente": componente_dict}
-    raise HTTPException(status_code=404, detail="Componente não encontrado no laboratório.")
 
 # CRUD - UPDATE (Atualizar quantidade ou dados)
 @app.put("/componentes/{componente_id}")
@@ -57,9 +60,10 @@ def atualizar_componente(componente_id: int, dados_atualizados: ComponenteSchema
             item["nome"] = dados_atualizados.nome
             item["quantidade"] = dados_atualizados.quantidade
             item["categoria"] = dados_atualizados.categoria
-            item["estado"] = dados_atualizados.estado
-            return {"mensagem": "Componente atualizado com sucesso!", "componente": item}
-            
+            item["estado_conservacao"] = dados_atualizados.estado_conservacao
+            return {"mensagem": "Componente updated com sucesso!", "componente": item}
+    
+    # Se o loop terminar e não der return, aí sim lançamos o 404 fora do bloco 'for'
     raise HTTPException(status_code=404, detail="Componente não encontrado no laboratório.")
 
 # CRUD - DELETE (Remover item do inventário)
@@ -70,4 +74,5 @@ def remover_componente(componente_id: int):
             estoque_laboratorio.pop(index)
             return {"mensagem": f"Componente com ID {componente_id} foi removido do estoque."}
             
+    # Se saiu do loop sem retornar, significa que o ID não existe
     raise HTTPException(status_code=404, detail="Componente não encontrado no laboratório.")
